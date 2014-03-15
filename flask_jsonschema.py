@@ -16,8 +16,7 @@ except ImportError:
     import json
 
 from flask import current_app, request
-from jsonschema import ValidationError, validate
-
+from jsonschema import validate
 
 class _JsonSchema(object):
     def __init__(self, schemas):
@@ -51,12 +50,26 @@ class JsonSchema(object):
         app.extensions['jsonschema'] = state
         return state
 
-    def validate(self, *path):
+    def validate(self, *validationArgs):
         def wrapper(fn):
             @wraps(fn)
             def decorated(*args, **kwargs):
-                schema = current_app.extensions['jsonschema'].get_schema(path)
+
+                cleanedArgs = []
+                customValidators = None
+                for arg in validationArgs:
+                    if 'customValidators' in arg:
+                        customValidators = arg['customValidators']
+                    else:
+                        cleanedArgs.append(arg)
+
+                schema = current_app.extensions['jsonschema'].get_schema(cleanedArgs)
                 validate(request.json, schema)
+
+                if customValidators is not None:
+                    for validatorFn in customValidators:
+                        validatorFn(request.json)
+
                 return fn(*args, **kwargs)
             return decorated
         return wrapper
